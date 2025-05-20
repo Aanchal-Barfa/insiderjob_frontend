@@ -12,7 +12,7 @@ const JobListing = () =>{
     const [selectedCategories,setSelectedCategories] = useState([])
     const [selectedLocations, setSelectedLocations] = useState([])
 
-    const [filteredJobs, setFilteredJobs] = useState(jobs)
+    const [filteredJobs, setFilteredJobs] = useState(jobs || [])
 
     const handleCategoryChange = (category) => {
         setSelectedCategories(
@@ -27,17 +27,22 @@ const JobListing = () =>{
     }
 
     useEffect(() => {
+         // Only proceed if jobs is defined and is an array
+        if (!jobs || !Array.isArray(jobs)) {
+            setFilteredJobs([]);
+            return;
+        }
 
-        const matchesCategory = job => selectedCategories.length === 0  || selectedCategories.includes(job.category)
+        const matchesCategory = job => selectedCategories.length === 0  || (job.category && selectedCategories.includes(job.category))
 
-        const matchesLocation = job => selectedLocations.length === 0  || selectedLocations.includes(job.location)
+        const matchesLocation = job => selectedLocations.length === 0  || (job.location && selectedLocations.includes(job.location))
 
-        const matchesTitle = job => searchFilter.title === ""  || job.title.toLowerCase().includes(searchFilter.title.toLowerCase())
+        const matchesTitle = job => searchFilter.title === ""  || job.title && job.title.toLowerCase().includes(searchFilter.title.toLowerCase())
 
-        const matchesSearchLocation = job =>  searchFilter.location === "" || job.location.toLowerCase().includes(searchFilter.location.toLowerCase())
+        const matchesSearchLocation = job =>  searchFilter.location === "" || job.location && job.location.toLowerCase().includes(searchFilter.location.toLowerCase())
 
         const newFilteredJobs= jobs.slice().reverse().filter(
-            job => matchesCategory(job) && matchesLocation(job) && matchesTitle(job) && matchesSearchLocation(job)
+            job => job && matchesCategory(job) && matchesLocation(job) && matchesTitle(job) && matchesSearchLocation(job)
         )
 
         setFilteredJobs(newFilteredJobs)

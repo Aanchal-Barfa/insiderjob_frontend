@@ -29,44 +29,66 @@ export const AppContextProvider = (props) => {
     const [userData,setUserData] = useState(null) 
     const [userApplications,setUserApplications] = useState([]) 
 
+   // Function to create user if not exists
     const createUserIfNotExists = async () => {
-  try {
-    const token = await getToken();
+        try {
+            if (!user) return;
 
-    await axios.post(`${backendUrl}/api/users/create-user`, {
-      firstName: user?.firstName,
-      lastName: user?.lastName,
-      email: user?.primaryEmailAddress?.emailAddress,
-      image: user?.imageUrl
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+            const token = await getToken();
+            if (!token) {
+                console.error("No token available");
+                return;
+            }
 
-  } catch (err) {
-    toast.error("User creation failed: " + err.message);
-  }
-};
+            console.log("Creating user with data:", {
+                firstName: user?.firstName,
+                lastName: user?.lastName,
+                email: user?.primaryEmailAddress?.emailAddress,
+                image: user?.imageUrl
+            });
 
+            const response = await axios.post(`${backendUrl}/api/users/create-user`, {
+                firstName: user?.firstName,
+                lastName: user?.lastName,
+                email: user?.primaryEmailAddress?.emailAddress,
+                image: user?.imageUrl
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
-    useEffect(() => {
-    const createUser = async () => {
-        const token = await getToken();
-        await axios.post(backendUrl + '/api/users/create-user', {
-            firstName: user?.firstName,
-            lastName: user?.lastName,
-            email: user?.primaryEmailAddress?.emailAddress,
-            image: user?.imageUrl
-        }, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+            if (response.data.success) {
+                console.log("User created or updated successfully");
+                return true;
+            } else {
+                console.error("User creation failed:", response.data.message);
+                return false;
+            }
+        } catch (err) {
+            console.error("User creation error:", err);
+            toast.error("User creation failed: " + (err.response?.data?.message || err.message));
+            return false;
+        }
     };
 
-    if (user) {
-        createUser();
-        fetchUserData();
-        fetchUserApplications();
-    }
-}, [user]);
+    // Effect to handle user login and data fetching
+    useEffect(() => {
+        const handleUserLogin = async () => {
+            if (!user) return;
+
+            try {
+                // First try to fetch user data
+                await fetchUserData();
+
+                // If we get here, user data was fetched successfully
+                // Also fetch applications
+                fetchUserApplications();
+            } catch (error) {
+                console.error("Error in user login flow:", error);
+            }
+        };
+
+        handleUserLogin();
+    }, [user]); 
 
 
     // Function to fetch jobs
@@ -106,40 +128,75 @@ export const AppContextProvider = (props) => {
     // Function to fetch user data
     const fetchUserData = async () => {
         try {
-           
-            const  token = await getToken();
+            if (!user) return;
+
+            const token = await getToken();
+            if (!token) {
+                console.error("No token available for fetchUserData");
+                return;
+            }
 
             const {data} = await axios.get(backendUrl+'/api/users/user',
-                {headers:{Authorization:`Bearer ${token}`}})
+                {headers:{Authorization:`Bearer ${token}`}});
 
-                if (data.success) {
-                   setUserData(data.user) 
-                }else{
-                    toast.error(data.message)
+            if (data.success) {
+                setUserData(data.user);
+                return true;
+            } else {
+                // Check if this is our special error code
+                if (data.code === 'USER_NOT_FOUND_NEEDS_CREATION') {
+                    console.log("User not found, attempting to create...");
+                    // Try to create the user
+                    const created = await createUserIfNotExists();
+                    if (created) {
+                        // If user was created successfully, try fetching again
+                        return fetchUserData();
+                    } else {
+                        toast.error("Could not create user account. Please try logging out and in again.");
+                    }
+                } else {
+                    // For other errors, just show the message
+                    toast.error(data.message);
                 }
-
+                return false;
+            }
         } catch (error) {
-            toast.error(error.message)
+            console.error("Error in fetchUserData:", error);
+            toast.error(error.response?.data?.message || error.message);
+            return false;
         }
     }
 
     // Function to fetch users applied application data
-    const fetchUserApplications = async () => {
+   const fetchUserApplications = async () => {
         try {
-            
-            const token = await getToken()
+            if (!user) return;
+
+            const token = await getToken();
+            if (!token) {
+                console.error("No token available for fetchUserApplications");
+                return;
+            }
 
             const {data} = await axios.get(backendUrl+'/api/users/applications',
                 {headers:{Authorization: `Bearer ${token}`}}
-            )
-            if (data.success) {
-                setUserApplications(data.applications)
-            }else{
-                toast.error(data.message)
-            }
+            );
 
+            if (data.success) {
+                setUserApplications(data.applications);
+                return true;
+            } else {
+                // Only show error if it's not a "no applications" message
+                if (data.message !== 'No job application found for this user') {
+                    toast.error(data.message);
+                }
+                return false;
+            }
         } catch (error) {
-            toast.error(error.message)
+            console.error("Error in fetchUserApplications:", error);
+            // Don't show toast for application errors as they're not critical
+            // toast.error(error.response?.data?.message || error.message);
+            return false;
         }
     }
 
@@ -182,6 +239,7 @@ export const AppContextProvider = (props) => {
         userApplications, setUserApplications,
         fetchUserData,
         fetchUserApplications,
+        createUserIfNotExists
     }
 
     return ( 
